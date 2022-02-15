@@ -2,7 +2,7 @@
 
 //#include <Peripheral_Setup.h>
 
-/*
+/**
  * main.c
  */
 //Declaração de variáveis
@@ -88,7 +88,7 @@ int main(void)
                   contadores.pre_carga = 0;
                   contadores.trip_event = 0;
 
-                  //inicializa as variavies de tensão e corrente
+                //inicializa as variavies de tensão e corrente
                   va = 0;
                   vb = 0;
                   vc = 0;
@@ -98,9 +98,12 @@ int main(void)
                   vDC = 0;
                   Vref = 0;
 
+             //inicializa o GPIO 26 que liga e desliga o pwm do boost
+              GpioDataRegs.GPADAT.bit.GPIO26 = 0;
+
+
 
                 //loop infinito
-
         while(1){
              for(count = 0; count < 0x00FFFFF; count++){
 
@@ -132,6 +135,14 @@ PieCtrlRegs.PIEACK.all = PIEACK_GROUP1; // serve para resetar o flag da interrup
 
 __interrupt void isr_adc(void){
 
+ // Over temperature  - Proteção contra elevação de temperatura (lê o GPIO 14 de temp. e desliga o GPIO 26 pwm boost)
+ GpioDataRegs.GPADAT.bit.GPIO26 = (!GpioDataRegs.GPADAT.bit.GPIO14) ? 1 : GpioDataRegs.GPADAT.bit.GPIO26;
+
+ //Liga novamente o pwm do conversor boost caso a temperatura tenha reduzido (quando o GPIO 14 volta pra 1)
+  if(GpioDataRegs.GPADAT.bit.GPIO14 != 0){
+            GpioDataRegs.GPADAT.bit.GPIO26 = 0;
+            }
+
     while(!AdcbRegs.ADCINTFLG.bit.ADCINT1);     // Wait ADCB finished  quando o ADCINT1 =1 , o pulso de interrupção ja foi gerado
 // Le os 4 valores do ADC A, 2 valores do ADC B e 2 valores do ADC C
     va =  0.001*((int)AdccResultRegs.ADCRESULT0 - 0x7FF); //soc 0 ADC C
@@ -142,6 +153,11 @@ __interrupt void isr_adc(void){
     iLb =  0.001*((int)AdcbResultRegs.ADCRESULT1 - 0x7FF); //soc 1 ADC B
     iLc =  0.001*((int)AdcaResultRegs.ADCRESULT2 - 0x7FF); //soc 2 ADC A
     Vref =  0.001*((int)AdcaResultRegs.ADCRESULT3 - 0x7FF); //soc 3 ADC A
+
+
+// Over voltage - Proteção de sobretenção no barramento CC, caso a tensão fique maior que 30 V desliga o PWM
+GpioDataRegs.GPADAT.bit.GPIO26 = (vDC > 30.0) ? 1 : GpioDataRegs.GPADAT.bit.GPIO26;
+
 
     plot1[index] = *padc1;//envia os valores para o vetor plot para verificação via debug
    // plot2[index] = *padc2;
